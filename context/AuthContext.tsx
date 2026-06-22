@@ -22,15 +22,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if token exists and validate
-    api.get('/api/v1/auth/me')
-      .then(async (resp) => {
+    // Only check auth if we have a token
+    const checkAuth = async () => {
+      try {
+        const storage = await getStorage();
+        const token = await storage.getItem('access_token');
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+        
+        const resp = await api.get('/api/v1/auth/me');
         if (resp.ok) {
           const data = await resp.json();
           setUser(data);
         }
-      })
-      .finally(() => setLoading(false));
+      } catch (e) {
+        console.log('Auth check failed (API may be down)');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    checkAuth();
   }, []);
 
   const login = async (email: string, password: string) => {

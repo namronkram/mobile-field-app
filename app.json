@@ -20,9 +20,6 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [],
-    "runtimeVersion": {
-      "policy": "appVersion"
-    }
+    "plugins": []
   }
 }

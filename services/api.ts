@@ -37,7 +37,7 @@ interface QueueItem {
 }
 
 class ApiClient {
-  private baseUrl: string;
+  public baseUrl: string;
   private accessToken: string | null = null;
 
   constructor(baseUrl: string) {
