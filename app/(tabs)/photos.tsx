@@ -1,8 +1,21 @@
 import { View, Text, StyleSheet, Button, FlatList, Image, ActivityIndicator, Alert } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+// import * as ImagePicker from 'expo-image-picker';
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Dynamic storage: uses localStorage on web, AsyncStorage on native
+const getStorage = async () => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    return {
+      getItem: async (key: string) => localStorage.getItem(key),
+      setItem: async (key: string, value: string) => localStorage.setItem(key, value),
+      removeItem: async (key: string) => localStorage.removeItem(key),
+    };
+  } else {
+    const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
+    return AsyncStorage;
+  }
+};
 
 interface Photo {
   uri: string;

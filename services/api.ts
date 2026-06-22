@@ -1,4 +1,24 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Platform-safe storage: localStorage on web, AsyncStorage on native
+let storage: any = null;
+
+const getStorage = async () => {
+  if (storage) return storage;
+  
+  if (typeof window !== 'undefined' && window.localStorage) {
+    // Web: use localStorage
+    storage = {
+      getItem: async (key: string) => localStorage.getItem(key),
+      setItem: async (key: string, value: string) => localStorage.setItem(key, value),
+      removeItem: async (key: string) => localStorage.removeItem(key),
+    };
+  } else {
+    // Native: dynamic import to avoid web bundling
+    const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
+    storage = AsyncStorage;
+  }
+  
+  return storage;
+};
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -27,7 +47,8 @@ class ApiClient {
 
   private async loadToken() {
     try {
-      const token = await AsyncStorage.getItem('access_token');
+      const storage = await getStorage();
+      const token = await storage.getItem('access_token');
       if (token) this.accessToken = token;
     } catch (e) {
       console.error('Failed to load token', e);
@@ -43,8 +64,9 @@ class ApiClient {
     if (!resp.ok) throw new Error('Login failed');
     const data = await resp.json();
     this.accessToken = data.access_token;
-    await AsyncStorage.setItem('access_token', data.access_token);
-    await AsyncStorage.setItem('refresh_token', data.refresh_token);
+    const storage = await getStorage();
+    await storage.setItem('access_token', data.access_token);
+    await storage.setItem('refresh_token', data.refresh_token);
     return data;
   }
 
@@ -89,10 +111,11 @@ class ApiClient {
     };
     
     try {
-      const raw = await AsyncStorage.getItem('offline_queue');
+      const storage = await getStorage();
+      const raw = await storage.getItem('offline_queue');
       const queue: QueueItem[] = raw ? JSON.parse(raw) : [];
       queue.push(queueItem);
-      await AsyncStorage.setItem('offline_queue', JSON.stringify(queue));
+      await storage.setItem('offline_queue', JSON.stringify(queue));
     } catch (e) {
       console.error('Failed to queue photo', e);
     }
@@ -100,7 +123,8 @@ class ApiClient {
 
   // Sync all queued items
   async syncQueue(): Promise<{ success: number; failed: number }> {
-    const raw = await AsyncStorage.getItem('offline_queue');
+    const storage = await getStorage();
+    const raw = await storage.getItem('offline_queue');
     if (!raw) return { success: 0, failed: 0 };
     
     const queue: QueueItem[] = JSON.parse(raw);
@@ -118,11 +142,9 @@ class ApiClient {
             throw new Error('Upload failed');
           }
         } else {
-          // Handle other types (audit, etc.)
           remaining.push(item);
         }
       } catch (e) {
-        // Retry up to 3 times
         if ((item.retries || 0) < 3) {
           item.retries = (item.retries || 0) + 1;
           remaining.push(item);
@@ -132,15 +154,15 @@ class ApiClient {
       }
     }
 
-    // Save remaining items
-    await AsyncStorage.setItem('offline_queue', JSON.stringify(remaining));
+    await storage.setItem('offline_queue', JSON.stringify(remaining));
     
     return { success, failed };
   }
 
   // Get queue status
   async getQueueStatus(): Promise<{ count: number; items: QueueItem[] }> {
-    const raw = await AsyncStorage.getItem('offline_queue');
+    const storage = await getStorage();
+    const raw = await storage.getItem('offline_queue');
     if (!raw) return { count: 0, items: [] };
     const items: QueueItem[] = JSON.parse(raw);
     return { count: items.length, items };
@@ -156,10 +178,8 @@ class ApiClient {
       headers,
     });
     if (resp.status === 401) {
-      // try refresh
       const refreshed = await this.refreshToken();
       if (refreshed) {
-        // retry
         headers['Authorization'] = `Bearer ${this.accessToken}`;
         return fetch(`${this.baseUrl}${path}`, { ...options, headers });
       }
@@ -169,7 +189,8 @@ class ApiClient {
 
   private async refreshToken(): Promise<boolean> {
     try {
-      const refreshToken = await AsyncStorage.getItem('refresh_token');
+      const storage = await getStorage();
+      const refreshToken = await storage.getItem('refresh_token');
       if (!refreshToken) return false;
       const resp = await fetch(`${this.baseUrl}/api/v1/auth/refresh`, {
         method: 'POST',
@@ -179,7 +200,7 @@ class ApiClient {
       if (!resp.ok) return false;
       const data = await resp.json();
       this.accessToken = data.access_token;
-      await AsyncStorage.setItem('access_token', data.access_token);
+      await storage.setItem('access_token', data.access_token);
       return true;
     } catch {
       return false;
@@ -188,8 +209,9 @@ class ApiClient {
 
   async logout() {
     this.accessToken = null;
-    await AsyncStorage.removeItem('access_token');
-    await AsyncStorage.removeItem('refresh_token');
+    const storage = await getStorage();
+    await storage.removeItem('access_token');
+    await storage.removeItem('refresh_token');
   }
 }
 
