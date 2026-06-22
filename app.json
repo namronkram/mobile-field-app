@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "mobile-field-app",
+    "slug": "mobile-field-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "runtimeVersion": "56.0.0",
+    "sdkVersion": "56.0.0",
+    "main": "expo-router/entry",
+    "scheme": "mobile-field-app",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kreislauf.mobilefieldapp"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE"
+      },
+      "package": "com.kreislauf.mobilefieldapp"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": []
+  }
+}
