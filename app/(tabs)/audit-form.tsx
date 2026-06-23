@@ -48,6 +48,8 @@ export default function AuditFormScreen() {
   };
 
   const handleSubmit = async () => {
+    console.log('[AuditForm] handleSubmit called');
+    
     if (!auditDate || !method) {
       Alert.alert('Error', 'Audit date and method are required');
       return;
@@ -59,6 +61,7 @@ export default function AuditFormScreen() {
     }
 
     setSubmitting(true);
+    console.log('[AuditForm] setSubmitting(true) done');
     try {
       const consumptionData = {
         electricity_kwh: parseInt(consumptionKwh) || 0,
@@ -77,17 +80,19 @@ export default function AuditFormScreen() {
         method: method,
         consumption_data: consumptionData,
         building_data: buildingData,
-        thermal_images: null, // TODO: upload local URIs to MinIO first, then send URLs
+        thermal_images: null,
         photos: null,
         findings: null,
         notes: notes || null,
       };
 
       console.log('[AuditForm] Submitting payload:', JSON.stringify(payload, null, 2));
+      console.log('[AuditForm] API URL:', `${api.baseUrl}/api/v1/energy-audits`);
 
       const resp = await api.post('/api/v1/energy-audits', payload);
       
       console.log('[AuditForm] Response status:', resp.status);
+      console.log('[AuditForm] Response ok:', resp.ok);
       
       if (resp.ok) {
         const data = await resp.json();
@@ -96,9 +101,9 @@ export default function AuditFormScreen() {
           { text: 'OK', onPress: () => router.back() },
         ]);
       } else {
-        const error = await resp.json();
-        console.error('[AuditForm] Error response:', error);
-        Alert.alert('Error', JSON.stringify(error) || 'Failed to create audit');
+        const errorText = await resp.text();
+        console.error('[AuditForm] Error response:', errorText);
+        Alert.alert('Error', `Status ${resp.status}: ${errorText}`);
       }
     } catch (e: any) {
       console.error('[AuditForm] Submit error:', e);
