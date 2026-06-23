@@ -51,8 +51,10 @@ export default function AuditScreen() {
               <Text style={styles.projectName}>{item.name}</Text>
               <Text style={styles.projectAddress}>{item.address}</Text>
               <Button title="Start Audit" onPress={() => {
-                // TODO: navigate to audit form
-                alert(`Audit for ${item.name}`);
+                router.push({
+                  pathname: '/(tabs)/audit-form',
+                  params: { projectId: item.id, projectName: item.name }
+                });
               }} />
             </View>
           )}
