@@ -6,8 +6,8 @@ import { api } from '../../services/api';
 
 interface Project {
   id: string;
-  name: string;
-  address: string;
+  title: string;
+  description: string | null;
 }
 
 export default function AuditScreen() {
@@ -50,11 +50,11 @@ export default function AuditScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <View style={styles.projectCard}>
-              <Text style={styles.projectName}>{item.name}</Text>
-              <Text style={styles.projectAddress}>{item.address}</Text>
+              <Text style={styles.projectName}>{item.title}</Text>
+              <Text style={styles.projectAddress}>{item.description || 'No description'}</Text>
               <Button title="Start Audit" onPress={() => {
                 // Use explicit query params in URL string
-                router.push(`/(tabs)/audit-form?projectId=${item.id}&projectName=${encodeURIComponent(item.name)}`);
+                router.push(`/(tabs)/audit-form?projectId=${item.id}&projectName=${encodeURIComponent(item.title)}`);
               }} />
             </View>
           )}

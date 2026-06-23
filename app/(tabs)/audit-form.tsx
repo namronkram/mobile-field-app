@@ -10,7 +10,11 @@ export default function AuditFormScreen() {
   const { projectId, projectName } = useLocalSearchParams<{ projectId: string; projectName: string }>();
   const router = useRouter();
   
-  console.log('[AuditForm] Received params:', { projectId, projectName });
+  // Use real projectId from navigation; no fake fallback
+  const finalProjectId = projectId || '';
+  const finalProjectName = projectName || 'Unknown Project';
+  
+  console.log('[AuditForm] Final params:', { finalProjectId, finalProjectName });
   
   // Pre-filled with valid dummy data
   const [auditDate, setAuditDate] = useState('2026-06-23');
@@ -49,7 +53,7 @@ export default function AuditFormScreen() {
       return;
     }
     
-    if (!projectId) {
+    if (!finalProjectId) {
       Alert.alert('Error', 'No project selected. Go back and select a project.');
       return;
     }
@@ -68,12 +72,12 @@ export default function AuditFormScreen() {
       };
 
       const payload = {
-        project_id: projectId,
+        project_id: finalProjectId,
         audit_date: auditDate,
         method: method,
         consumption_data: consumptionData,
         building_data: buildingData,
-        thermal_images: thermalImageUris.length > 0 ? thermalImageUris : null,
+        thermal_images: null, // TODO: upload local URIs to MinIO first, then send URLs
         photos: null,
         findings: null,
         notes: notes || null,
