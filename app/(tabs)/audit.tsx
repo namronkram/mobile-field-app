@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, Button } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
+import { useRouter } from 'expo-router';
 import { api } from '../../services/api';
 
 interface Project {
@@ -11,6 +12,7 @@ interface Project {
 
 export default function AuditScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
