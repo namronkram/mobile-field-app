@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Button, ScrollView, Alert, ActivityIndicator, Picker } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Button, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { api } from '../../services/api';
 
@@ -18,6 +19,24 @@ export default function AuditFormScreen() {
   const [findings, setFindings] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [thermalImageUris, setThermalImageUris] = useState<string[]>([]);
+
+  const pickThermalImages = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets) {
+      const newUris = result.assets.map(a => a.uri);
+      setThermalImageUris(prev => [...prev, ...newUris]);
+    }
+  };
+
+  const removeThermalImage = (uri: string) => {
+    setThermalImageUris(prev => prev.filter(u => u !== uri));
+  };
 
   const handleSubmit = async () => {
     if (!auditDate || !method) {
@@ -33,7 +52,7 @@ export default function AuditFormScreen() {
         method: method,
         consumption_data: consumptionData ? JSON.parse(consumptionData) : null,
         building_data: buildingData ? JSON.parse(buildingData) : null,
-        thermal_images: thermalImages ? thermalImages.split(',').map(s => s.trim()) : null,
+        thermal_images: thermalImageUris.length > 0 ? thermalImageUris : null,
         photos: photos ? photos.split(',').map(s => s.trim()) : null,
         findings: findings ? JSON.parse(findings) : null,
         notes: notes || null,
@@ -109,8 +128,23 @@ export default function AuditFormScreen() {
         numberOfLines={4}
       />
 
-      {/* Thermal Images (comma-separated URLs) */}
-      <Text style={styles.label}>Thermal Images (comma-separated URLs)</Text>
+      {/* Thermal Images Upload */}
+      <Text style={styles.label}>Thermal Images</Text>
+      <Button title="Upload Thermal Images" onPress={pickThermalImages} color="#FF9500" />
+      <View style={styles.imagePreviewContainer}>
+        {thermalImageUris.map(uri => (
+          <View key={uri} style={styles.imageWrapper}>
+            <Image source={{ uri }} style={styles.thumbnail} />
+            <Button title="Remove" onPress={() => removeThermalImage(uri)} color="#FF3B30" />
+          </View>
+        ))}
+      </View>
+      {thermalImageUris.length > 0 && (
+        <Text style={styles.hintText}>{thermalImageUris.length} thermal image(s) selected</Text>
+      )}
+
+      {/* Photos (comma-separated URLs) */}
+      <Text style={styles.label}>Photos (comma-separated URLs)</Text>
       <TextInput
         style={styles.input}
         placeholder="https://.../thermal1.jpg, https://.../thermal2.jpg"
@@ -170,4 +204,8 @@ const styles = StyleSheet.create({
   textArea: { height: 100, textAlignVertical: 'top' },
   pickerContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginVertical: 10 },
   buttonContainer: { marginTop: 20, marginBottom: 10 },
+  imagePreviewContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
+  imageWrapper: { alignItems: 'center' },
+  thumbnail: { width: 80, height: 80, borderRadius: 8 },
+  hintText: { fontSize: 12, color: '#999', marginTop: 5, marginBottom: 10 },
 });
