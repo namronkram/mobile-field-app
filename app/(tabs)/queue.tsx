@@ -53,9 +53,8 @@ export default function QueueScreen() {
   };
 
   const removeItem = async (id: string) => {
-    const updated = queue.filter(item => item.id !== id);
-    await AsyncStorage.setItem('offline_queue', JSON.stringify(updated));
-    setQueue(updated);
+    await api.removeQueuedItem(id);
+    await loadQueue();
   };
 
   return (

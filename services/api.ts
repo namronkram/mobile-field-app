@@ -168,6 +168,21 @@ class ApiClient {
     return { count: items.length, items };
   }
 
+  // Remove item from queue (used by Queue tab + Photos tab)
+  async removeQueuedItem(id: string): Promise<void> {
+    const storage = await getStorage();
+    const raw = await storage.getItem('offline_queue');
+    if (!raw) return;
+    const queue: QueueItem[] = JSON.parse(raw);
+    const updated = queue.filter(item => item.id !== id);
+    await storage.setItem('offline_queue', JSON.stringify(updated));
+  }
+
+  // Get storage (public for use in components)
+  async getStorage() {
+    return await getStorage();
+  }
+
   private async fetchWithAuth(path: string, options: RequestInit) {
     const headers: any = { ...options.headers };
     if (this.accessToken) {

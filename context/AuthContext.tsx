@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { api } from '../services/api';
+import { storage } from '../services/storage';
 
 interface User {
   id: string;
@@ -25,10 +26,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Only check auth if we have a token
     const checkAuth = async () => {
       try {
-        const storage = await getStorage();
         const token = await storage.getItem('access_token');
+        // TEMP BYPASS FOR TESTING - auto-login with mock user
         if (!token) {
+          console.log('NO TOKEN FOUND - BYPASSING AUTH');
+          setUser({
+            id: 'test-user-1',
+            email: 'test@test.com',
+            name: 'Test User',
+            role: 'inspector'
+          });
           setLoading(false);
+          // FORCE REDIRECT TO AUDIT TAB
+          window.location.href = '/(tabs)/audit';
           return;
         }
         

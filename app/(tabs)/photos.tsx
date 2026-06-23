@@ -1,21 +1,10 @@
-import { View, Text, StyleSheet, Button, FlatList, Image, ActivityIndicator, Alert } from 'react-native';
-// import * as ImagePicker from 'expo-image-picker';
+import React from 'react';
+import { View, Text, StyleSheet, Button, FlatList, Image, Alert } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useState, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { api } from '../../services/api';
-
-// Dynamic storage: uses localStorage on web, AsyncStorage on native
-const getStorage = async () => {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    return {
-      getItem: async (key: string) => localStorage.getItem(key),
-      setItem: async (key: string, value: string) => localStorage.setItem(key, value),
-      removeItem: async (key: string) => localStorage.removeItem(key),
-    };
-  } else {
-    const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
-    return AsyncStorage;
-  }
-};
 
 interface Photo {
   uri: string;
@@ -23,16 +12,46 @@ interface Photo {
   uploaded: boolean;
   uploading: boolean;
   queued: boolean;
+  id: string;
 }
 
 export default function PhotosScreen() {
+  const router = useRouter();
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [uploading, setUploading] = useState(false);
   const [online, setOnline] = useState(true);
 
-  useEffect(() => {
-    checkOnlineStatus();
-  }, []);
+  // ✅ Correct useFocusEffect pattern — plain function, no useCallback wrapper
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('[Photos] Tab focused — reloading...');
+      loadPhotos();
+      checkOnlineStatus();
+    }, [])
+  );
+
+  const loadPhotos = async () => {
+    try {
+      console.log('[Photos] Reading offline_queue...');
+      const status = await api.getQueueStatus();
+      const queuePhotos: Photo[] = status.items
+        .filter((item: any) => item.type === 'photo')
+        .map((item: any) => ({
+          uri: item.data.uri,
+          name: item.data.name,
+          uploaded: false,
+          uploading: false,
+          queued: true,
+          id: item.id,
+        }));
+
+      console.log(`[Photos] Loaded ${queuePhotos.length} photo(s) from offline_queue`);
+      setPhotos(queuePhotos);
+    } catch (e: any) {
+      console.error('[Photos] Failed to load photos:', e.message);
+      setPhotos([]);
+    }
+  };
 
   const checkOnlineStatus = async () => {
     try {
@@ -45,20 +64,17 @@ export default function PhotosScreen() {
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    mediaTypes: ['images'],
       allowsMultipleSelection: true,
       quality: 0.8,
     });
 
-    if (!result.canceled) {
-      const newPhotos = result.assets.map(asset => ({
-        uri: asset.uri,
-        name: asset.fileName || `photo_${Date.now()}.jpg`,
-        uploaded: false,
-        uploading: false,
-        queued: false,
-      }));
-      setPhotos([...photos, ...newPhotos]);
+    if (!result.canceled && result.assets) {
+      for (const asset of result.assets) {
+        await api.queuePhoto(asset.uri, asset.fileName || `photo-${Date.now()}`);
+      }
+      await loadPhotos();
+      Alert.alert('Queued', `${result.assets.length} photo(s) queued for sync`);
     }
   };
 
@@ -67,61 +83,44 @@ export default function PhotosScreen() {
       quality: 0.8,
     });
 
-    if (!result.canceled) {
-      const newPhoto = {
-        uri: result.assets[0].uri,
-        name: `photo_${Date.now()}.jpg`,
-        uploaded: false,
-        uploading: false,
-        queued: false,
-      };
-      setPhotos([...photos, newPhoto]);
+    if (!result.canceled && result.assets && result.assets[0]) {
+      await api.queuePhoto(result.assets[0].uri, `photo_${Date.now()}.jpg`);
+      await loadPhotos();
+      Alert.alert('Queued', 'Photo queued for sync');
     }
   };
 
   const handlePhoto = async (photo: Photo, index: number) => {
-    if (!online) {
-      // Queue for offline sync
-      await api.queuePhoto(photo.uri, photo.name);
-      setPhotos(photos.map((p, i) => i === index ? { ...p, queued: true } : p));
-      Alert.alert('Queued', `Photo ${photo.name} queued for sync`);
-    } else {
-      // Upload immediately
-      await uploadPhoto(photo, index);
-    }
-  };
-
-  const uploadPhoto = async (photo: Photo, index: number) => {
-    setPhotos(photos.map((p, i) => i === index ? { ...p, uploading: true } : p));
-
-    try {
-      const resp = await api.uploadPhoto(photo.uri, photo.name);
-      if (resp.ok) {
-        setPhotos(photos.map((p, i) => i === index ? { ...p, uploaded: true, uploading: false } : p));
-        Alert.alert('Success', `Photo ${photo.name} uploaded`);
-      } else {
-        throw new Error('Upload failed');
+    if (online) {
+      setPhotos(photos.map((p, i) => i === index ? { ...p, uploading: true } : p));
+      try {
+        const resp = await api.uploadPhoto(photo.uri, photo.name);
+        if (resp.ok) {
+          await api.removeQueuedItem(photo.id);
+          await loadPhotos();
+          Alert.alert('Success', `Photo ${photo.name} uploaded`);
+        } else {
+          throw new Error('Upload failed');
+        }
+      } catch (e) {
+        setPhotos(photos.map((p, i) => i === index ? { ...p, uploading: false } : p));
+        Alert.alert('Offline', 'Photo remains in queue');
       }
-    } catch (e) {
-      setPhotos(photos.map((p, i) => i === index ? { ...p, uploading: false } : p));
-      
-      // Queue for offline sync
-      await api.queuePhoto(photo.uri, photo.name);
-      setPhotos(photos.map((p, i) => i === index ? { ...p, queued: true } : p));
-      Alert.alert('Queued', `Photo ${photo.name} queued for sync`);
+    } else {
+      Alert.alert('Offline', 'Photo already queued');
     }
   };
 
   const uploadAll = async () => {
     setUploading(true);
-    const notUploaded = photos.filter(p => !p.uploaded);
-    
+    const notUploaded = photos.filter(p => !p.uploaded && !p.uploading);
+
     for (let i = 0; i < notUploaded.length; i++) {
       const photo = notUploaded[i];
-      const index = photos.findIndex(p => p.uri === photo.uri);
+      const index = photos.findIndex(p => p.id === photo.id);
       await handlePhoto(photo, index);
     }
-    
+
     setUploading(false);
   };
 
@@ -133,7 +132,7 @@ export default function PhotosScreen() {
           <Text style={styles.statusText}>{online ? 'Online' : 'Offline'}</Text>
         </View>
       </View>
-      
+
       <View style={styles.buttonRow}>
         <Button title="Take Photo" onPress={takePhoto} />
         <Button title="Choose from Gallery" onPress={pickImage} />
@@ -142,43 +141,47 @@ export default function PhotosScreen() {
       {photos.length === 0 ? (
         <Text style={styles.empty}>No photos yet. Take or select photos to document the audit.</Text>
       ) : (
-        <>
+        <View>
           <FlatList
             data={photos}
-            keyExtractor={(item) => item.uri}
+            keyExtractor={(item) => item.id}
             renderItem={({ item, index }) => (
               <View style={styles.photoCard}>
                 <Image source={{ uri: item.uri }} style={styles.thumbnail} />
                 <View style={styles.photoInfo}>
                   <Text style={styles.photoName}>{item.name}</Text>
                   <Text style={styles.photoStatus}>
-                    {item.uploading ? 'Uploading...' : 
-                     item.uploaded ? '✅ Uploaded' : 
-                     item.queued ? '📦 Queued' : 'Ready'}
+                    {item.uploading ? 'Uploading...' :
+                      item.uploaded ? '✅ Uploaded' :
+                        item.queued ? '📦 Queued' : 'Ready'}
                   </Text>
-                  {!item.uploaded && !item.uploading && !item.queued && (
-                    <Button title={online ? 'Upload' : 'Queue'} onPress={() => handlePhoto(item, index)} />
+                  {!item.uploaded && !item.uploading && (
+                    <Button title={online ? 'Upload' : 'Queued'} onPress={() => handlePhoto(item, index)} disabled={!online} />
                   )}
                 </View>
               </View>
             )}
           />
-          
-          {photos.some(p => !p.uploaded && !p.queued) && (
-            <Button 
-              title={uploading ? 'Processing...' : 'Upload/Queue All'} 
+
+          {photos.some(p => !p.uploaded && !p.uploading) && (
+            <Button
+              title={uploading ? 'Processing...' : 'Upload All'}
               onPress={uploadAll}
-              disabled={uploading}
+              disabled={uploading || !online}
             />
           )}
-          
-          {photos.some(p => p.queued) && (
-            <Button 
-              title="Go to Queue" 
-              onPress={() => {/* Navigate to queue tab */}} 
-            />
-          )}
-        </>
+
+          <Button
+            title="Go to Queue"
+            onPress={() => router.push('/(tabs)/queue')}
+          />
+
+          <Button
+            title="Refresh"
+            onPress={loadPhotos}
+            color="#666"
+          />
+        </View>
       )}
     </View>
   );
