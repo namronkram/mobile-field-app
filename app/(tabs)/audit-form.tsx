@@ -10,16 +10,16 @@ export default function AuditFormScreen() {
   const { projectId, projectName } = useLocalSearchParams<{ projectId: string; projectName: string }>();
   const router = useRouter();
   
-  const [auditDate, setAuditDate] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD
+  // Pre-filled with valid dummy data
+  const [auditDate, setAuditDate] = useState('2026-06-23');
   const [method, setMethod] = useState('remote');
-  const [consumptionData, setConsumptionData] = useState('');
-  const [buildingData, setBuildingData] = useState('');
-  const [thermalImages, setThermalImages] = useState('');
-  const [photos, setPhotos] = useState('');
-  const [findings, setFindings] = useState('');
-  const [notes, setNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [consumptionData, setConsumptionData] = useState('{"electricity_kwh": 50000, "gas_kwh": 30000}');
+  const [buildingData, setBuildingData] = useState('{"area_m2": 500, "year_built": 1995, "building_type": "office"}');
   const [thermalImageUris, setThermalImageUris] = useState<string[]>([]);
+  const [photos, setPhotos] = useState('');
+  const [findings, setFindings] = useState('[{"type": "insufficient_insulation", "severity": "high"}]');
+  const [notes, setNotes] = useState('Test audit - all fields pre-filled with dummy data');
+  const [submitting, setSubmitting] = useState(false);
 
   const pickThermalImages = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -38,6 +38,16 @@ export default function AuditFormScreen() {
     setThermalImageUris(prev => prev.filter(u => u !== uri));
   };
 
+  const safeJsonParse = (str: string, fieldName: string) => {
+    if (!str || str.trim() === '') return null;
+    try {
+      return JSON.parse(str);
+    } catch (e) {
+      Alert.alert('Invalid JSON', `${fieldName} is not valid JSON. Please fix it.`);
+      throw new Error(`Invalid JSON in ${fieldName}`);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!auditDate || !method) {
       Alert.alert('Error', 'Audit date and method are required');
@@ -48,13 +58,13 @@ export default function AuditFormScreen() {
     try {
       const payload = {
         project_id: projectId,
-        audit_date: auditDate, // YYYY-MM-DD
+        audit_date: auditDate,
         method: method,
-        consumption_data: consumptionData ? JSON.parse(consumptionData) : null,
-        building_data: buildingData ? JSON.parse(buildingData) : null,
+        consumption_data: safeJsonParse(consumptionData, 'Consumption Data'),
+        building_data: safeJsonParse(buildingData, 'Building Data'),
         thermal_images: thermalImageUris.length > 0 ? thermalImageUris : null,
         photos: photos ? photos.split(',').map(s => s.trim()) : null,
-        findings: findings ? JSON.parse(findings) : null,
+        findings: safeJsonParse(findings, 'Findings'),
         notes: notes || null,
       };
 
@@ -68,6 +78,10 @@ export default function AuditFormScreen() {
         Alert.alert('Error', error.detail || 'Failed to create audit');
       }
     } catch (e) {
+      if (e instanceof Error && e.message.includes('Invalid JSON')) {
+        // Already handled by safeJsonParse
+        return;
+      }
       Alert.alert('Error', 'Failed to submit audit. Check API connection.');
       console.error('Audit submit error:', e);
     } finally {
@@ -142,15 +156,6 @@ export default function AuditFormScreen() {
       {thermalImageUris.length > 0 && (
         <Text style={styles.hintText}>{thermalImageUris.length} thermal image(s) selected</Text>
       )}
-
-      {/* Photos (comma-separated URLs) */}
-      <Text style={styles.label}>Photos (comma-separated URLs)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="https://.../thermal1.jpg, https://.../thermal2.jpg"
-        value={thermalImages}
-        onChangeText={setThermalImages}
-      />
 
       {/* Photos (comma-separated URLs) */}
       <Text style={styles.label}>Photos (comma-separated URLs)</Text>
