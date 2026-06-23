@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Button, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { View, Text, StyleSheet, TextInput, Button, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { api } from '../../services/api';
 
@@ -10,43 +9,16 @@ export default function AuditFormScreen() {
   const { projectId, projectName } = useLocalSearchParams<{ projectId: string; projectName: string }>();
   const router = useRouter();
   
-  // Pre-filled with valid dummy data
+  // Pre-filled with valid dummy data (properly escaped)
   const [auditDate, setAuditDate] = useState('2026-06-23');
   const [method, setMethod] = useState('remote');
-  const [consumptionData, setConsumptionData] = useState('{"electricity_kwh": 50000, "gas_kwh": 30000}');
-  const [buildingData, setBuildingData] = useState('{"area_m2": 500, "year_built": 1995, "building_type": "office"}');
-  const [thermalImageUris, setThermalImageUris] = useState<string[]>([]);
-  const [photos, setPhotos] = useState('');
-  const [findings, setFindings] = useState('[{"type": "insufficient_insulation", "severity": "high"}]');
-  const [notes, setNotes] = useState('Test audit - all fields pre-filled with dummy data');
+  const [consumptionKwh, setConsumptionKwh] = useState('50000');
+  const [gasKwh, setGasKwh] = useState('30000');
+  const [areaM2, setAreaM2] = useState('500');
+  const [yearBuilt, setYearBuilt] = useState('1995');
+  const [buildingType, setBuildingType] = useState('office');
+  const [notes, setNotes] = useState('Test audit - dummy data pre-filled');
   const [submitting, setSubmitting] = useState(false);
-
-  const pickThermalImages = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets) {
-      const newUris = result.assets.map(a => a.uri);
-      setThermalImageUris(prev => [...prev, ...newUris]);
-    }
-  };
-
-  const removeThermalImage = (uri: string) => {
-    setThermalImageUris(prev => prev.filter(u => u !== uri));
-  };
-
-  const safeJsonParse = (str: string, fieldName: string) => {
-    if (!str || str.trim() === '') return null;
-    try {
-      return JSON.parse(str);
-    } catch (e) {
-      Alert.alert('Invalid JSON', `${fieldName} is not valid JSON. Please fix it.`);
-      throw new Error(`Invalid JSON in ${fieldName}`);
-    }
-  };
 
   const handleSubmit = async () => {
     if (!auditDate || !method) {
@@ -56,34 +28,51 @@ export default function AuditFormScreen() {
 
     setSubmitting(true);
     try {
+      // Build consumption_data as proper object
+      const consumptionData = {
+        electricity_kwh: parseInt(consumptionKwh) || 0,
+        gas_kwh: parseInt(gasKwh) || 0,
+      };
+
+      // Build building_data as proper object
+      const buildingData = {
+        area_m2: parseFloat(areaM2) || 0,
+        year_built: parseInt(yearBuilt) || null,
+        building_type: buildingType,
+      };
+
       const payload = {
         project_id: projectId,
         audit_date: auditDate,
         method: method,
-        consumption_data: safeJsonParse(consumptionData, 'Consumption Data'),
-        building_data: safeJsonParse(buildingData, 'Building Data'),
-        thermal_images: thermalImageUris.length > 0 ? thermalImageUris : null,
-        photos: photos ? photos.split(',').map(s => s.trim()) : null,
-        findings: safeJsonParse(findings, 'Findings'),
+        consumption_data: consumptionData,
+        building_data: buildingData,
+        thermal_images: null, // Skip for now - needs upload first
+        photos: null,
+        findings: null,
         notes: notes || null,
       };
 
+      console.log('[AuditForm] Submitting payload:', JSON.stringify(payload, null, 2));
+
       const resp = await api.post('/api/v1/energy-audits', payload);
+      
+      console.log('[AuditForm] Response status:', resp.status);
+      
       if (resp.ok) {
+        const data = await resp.json();
+        console.log('[AuditForm] Success:', data);
         Alert.alert('Success', 'Energy audit created successfully', [
           { text: 'OK', onPress: () => router.back() },
         ]);
       } else {
         const error = await resp.json();
+        console.error('[AuditForm] Error response:', error);
         Alert.alert('Error', error.detail || 'Failed to create audit');
       }
     } catch (e) {
-      if (e instanceof Error && e.message.includes('Invalid JSON')) {
-        // Already handled by safeJsonParse
-        return;
-      }
-      Alert.alert('Error', 'Failed to submit audit. Check API connection.');
-      console.error('Audit submit error:', e);
+      console.error('[AuditForm] Submit error:', e);
+      Alert.alert('Error', `Failed to submit: ${e.message || 'Unknown error'}`);
     } finally {
       setSubmitting(false);
     }
@@ -120,61 +109,53 @@ export default function AuditFormScreen() {
         ))}
       </View>
 
-      {/* Consumption Data (JSON) */}
-      <Text style={styles.label}>Consumption Data (JSON)</Text>
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        placeholder='{"electricity_kwh": 50000, "gas_kwh": 30000}'
-        value={consumptionData}
-        onChangeText={setConsumptionData}
-        multiline
-        numberOfLines={4}
-      />
-
-      {/* Building Data (JSON) */}
-      <Text style={styles.label}>Building Data (JSON)</Text>
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        placeholder='{"area_m2": 500, "year_built": 1995, "building_type": "office"}'
-        value={buildingData}
-        onChangeText={setBuildingData}
-        multiline
-        numberOfLines={4}
-      />
-
-      {/* Thermal Images Upload */}
-      <Text style={styles.label}>Thermal Images</Text>
-      <Button title="Upload Thermal Images" onPress={pickThermalImages} color="#FF9500" />
-      <View style={styles.imagePreviewContainer}>
-        {thermalImageUris.map(uri => (
-          <View key={uri} style={styles.imageWrapper}>
-            <Image source={{ uri }} style={styles.thumbnail} />
-            <Button title="Remove" onPress={() => removeThermalImage(uri)} color="#FF3B30" />
-          </View>
-        ))}
-      </View>
-      {thermalImageUris.length > 0 && (
-        <Text style={styles.hintText}>{thermalImageUris.length} thermal image(s) selected</Text>
-      )}
-
-      {/* Photos (comma-separated URLs) */}
-      <Text style={styles.label}>Photos (comma-separated URLs)</Text>
+      {/* Electricity Consumption */}
+      <Text style={styles.label}>Electricity (kWh/year)</Text>
       <TextInput
         style={styles.input}
-        placeholder="https://.../photo1.jpg, https://.../photo2.jpg"
-        value={photos}
-        onChangeText={setPhotos}
+        placeholder="50000"
+        value={consumptionKwh}
+        onChangeText={setConsumptionKwh}
+        keyboardType="numeric"
       />
 
-      {/* Findings (JSON) */}
-      <Text style={styles.label}>Findings (JSON)</Text>
+      {/* Gas Consumption */}
+      <Text style={styles.label}>Gas (kWh/year)</Text>
       <TextInput
-        style={[styles.input, styles.textArea]}
-        placeholder='[{"type": "insufficient_insulation", "severity": "high"}]'
-        value={findings}
-        onChangeText={setFindings}
-        multiline
-        numberOfLines={4}
+        style={styles.input}
+        placeholder="30000"
+        value={gasKwh}
+        onChangeText={setGasKwh}
+        keyboardType="numeric"
+      />
+
+      {/* Area */}
+      <Text style={styles.label}>Area (m²) *</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="500"
+        value={areaM2}
+        onChangeText={setAreaM2}
+        keyboardType="numeric"
+      />
+
+      {/* Year Built */}
+      <Text style={styles.label}>Year Built</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="1995"
+        value={yearBuilt}
+        onChangeText={setYearBuilt}
+        keyboardType="numeric"
+      />
+
+      {/* Building Type */}
+      <Text style={styles.label}>Building Type</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="office, residential, industrial"
+        value={buildingType}
+        onChangeText={setBuildingType}
       />
 
       {/* Notes */}
@@ -209,8 +190,4 @@ const styles = StyleSheet.create({
   textArea: { height: 100, textAlignVertical: 'top' },
   pickerContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginVertical: 10 },
   buttonContainer: { marginTop: 20, marginBottom: 10 },
-  imagePreviewContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
-  imageWrapper: { alignItems: 'center' },
-  thumbnail: { width: 80, height: 80, borderRadius: 8 },
-  hintText: { fontSize: 12, color: '#999', marginTop: 5, marginBottom: 10 },
 });
