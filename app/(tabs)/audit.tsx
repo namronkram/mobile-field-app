@@ -53,10 +53,8 @@ export default function AuditScreen() {
               <Text style={styles.projectName}>{item.name}</Text>
               <Text style={styles.projectAddress}>{item.address}</Text>
               <Button title="Start Audit" onPress={() => {
-                router.push({
-                  pathname: '/(tabs)/audit-form',
-                  params: { projectId: item.id, projectName: item.name }
-                });
+                // Use explicit query params in URL string
+                router.push(`/(tabs)/audit-form?projectId=${item.id}&projectName=${encodeURIComponent(item.name)}`);
               }} />
             </View>
           )}
