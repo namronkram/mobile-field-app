@@ -103,7 +103,7 @@ class ApiClient {
   // Queue a photo for offline sync
   async queuePhoto(photoUri: string, fileName: string): Promise<void> {
     const queueItem: QueueItem = {
-      id: `photo_${Date.now()}`,
+      id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       type: 'photo',
       data: { uri: photoUri, name: fileName },
       timestamp: Date.now(),
