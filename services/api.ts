@@ -82,22 +82,57 @@ class ApiClient {
     });
   }
 
-  async uploadPhoto(photoUri: string, fileName: string): Promise<Response> {
+  private async buildImageFormData(uri: string, filename: string): Promise<FormData> {
     const formData = new FormData();
-    formData.append('file', {
-      uri: photoUri,
-      name: fileName,
-      type: 'image/jpeg',
-    } as any);
-    
+
+    if (typeof window !== 'undefined') {
+      // Web: ImagePicker returns blob:/data: URLs. Convert to Blob for multipart upload.
+      const blob = await fetch(uri).then(r => r.blob());
+      formData.append('file', blob, filename);
+    } else {
+      // Native: React Native FormData accepts { uri, name, type } objects.
+      formData.append('file', {
+        uri,
+        name: filename,
+        type: 'image/jpeg',
+      } as any);
+    }
+
+    return formData;
+  }
+
+  async uploadPhoto(photoUri: string, fileName: string): Promise<Response> {
+    const formData = await this.buildImageFormData(photoUri, fileName);
+    const headers: any = this.accessToken ? { 'Authorization': `Bearer ${this.accessToken}` } : {};
+
+    // Do NOT set Content-Type for FormData; browser/native adds multipart boundary.
     return fetch(`${this.baseUrl}/api/v1/upload/photo`, {
       method: 'POST',
       body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        ...(this.accessToken ? { 'Authorization': `Bearer ${this.accessToken}` } : {}),
-      },
+      headers,
     });
+  }
+
+  // Upload a thermal image and return the URL
+  async uploadThermalImage(uri: string): Promise<string> {
+    const filename = `thermal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
+    const formData = await this.buildImageFormData(uri, filename);
+    const headers: any = this.accessToken ? { 'Authorization': `Bearer ${this.accessToken}` } : {};
+
+    // Do NOT set Content-Type for FormData; browser/native adds multipart boundary.
+    const resp = await fetch(`${this.baseUrl}/api/v1/upload/thermal`, {
+      method: 'POST',
+      body: formData,
+      headers,
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`Upload failed (${resp.status}): ${errText}`);
+    }
+
+    const data = await resp.json();
+    return data.url;
   }
 
   // Queue a photo for offline sync

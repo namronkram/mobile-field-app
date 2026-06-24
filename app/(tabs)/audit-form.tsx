@@ -63,6 +63,21 @@ export default function AuditFormScreen() {
     setSubmitting(true);
     console.log('[AuditForm] setSubmitting(true) done');
     try {
+      // Step 1: Upload thermal images if any
+      let thermalImageUrls: string[] = [];
+      if (thermalImageUris.length > 0) {
+        console.log(`[AuditForm] Uploading ${thermalImageUris.length} thermal image(s)...`);
+        for (let i = 0; i < thermalImageUris.length; i++) {
+          const uri = thermalImageUris[i];
+          console.log(`[AuditForm] Uploading image ${i + 1}/${thermalImageUris.length}: ${uri}`);
+          const url = await api.uploadThermalImage(uri);
+          console.log(`[AuditForm] Uploaded image ${i + 1}: ${url}`);
+          thermalImageUrls.push(url);
+        }
+        console.log('[AuditForm] All thermal images uploaded:', thermalImageUrls);
+      }
+
+      // Step 2: Build payload with uploaded URLs
       const consumptionData = {
         electricity_kwh: parseInt(consumptionKwh) || 0,
         gas_kwh: parseInt(gasKwh) || 0,
@@ -80,7 +95,7 @@ export default function AuditFormScreen() {
         method: method,
         consumption_data: consumptionData,
         building_data: buildingData,
-        thermal_images: null,
+        thermal_images: thermalImageUrls.length > 0 ? thermalImageUrls : null,
         photos: null,
         findings: null,
         notes: notes || null,
@@ -89,6 +104,7 @@ export default function AuditFormScreen() {
       console.log('[AuditForm] Submitting payload:', JSON.stringify(payload, null, 2));
       console.log('[AuditForm] API URL:', `${api.baseUrl}/api/v1/energy-audits`);
 
+      // Step 3: Submit audit
       const resp = await api.post('/api/v1/energy-audits', payload);
       
       console.log('[AuditForm] Response status:', resp.status);
